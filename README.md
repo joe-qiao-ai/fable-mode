@@ -1,73 +1,124 @@
-# fable-mode
+# fable-mode — make Claude Opus work like Fable
 
-A [Claude Code](https://claude.com/claude-code) skill that carries the working habits of Anthropic's Fable-tier model over to Claude Opus — so Opus decides instead of deferring, verifies instead of assuming, and ships instead of asking.
+**One-sentence pitch:** a drop-in [Claude Code](https://claude.com/claude-code) skill that gives Claude Opus the work habits of Anthropic's top-tier Fable model — it stops deferring, starts owning problems, and never ships a result it knows is wrong.
 
-> **Measured result (58 trials on the discriminating task):** on a planted bug that unit tests can't catch, Opus 4.8 **with** this skill shipped a correct result **29/29** times; **without** it, **24/29** (one-sided Fisher exact p ≈ 0.026). Every failure shipped a report the agent could have caught by checking its own output. On a second, non-trap task family both arms scored 25/25 — the effect is a targeted fix for one ownership failure mode, not a general quality boost. Fable 5 needed no skill (4/4 either way). Full methodology, statistics, and null results: [docs/EVALUATION.md](docs/EVALUATION.md).
+**Proof, in one line:** across 58 controlled trials on a bug that unit tests can't catch, Opus **with** this skill shipped correct results **29/29** times; **without** it, **24/29** (Fisher exact p ≈ 0.026). [Full evaluation →](docs/EVALUATION.md)
 
-## What it does
-
-`fable-mode` is a working-style contract in eight rules, distilled from Anthropic's official Fable migration guidance and hardened by A/B testing:
-
-1. **Lock the goal** — restate the task with checkable "done" criteria before acting; ask at most one batched clarifying question.
-2. **Autonomy** — decide minor choices and note them; never end a turn on "Want me to…?" for in-scope work.
-3. **Delegate deliberately** — parallel subagents for fan-out work; never a subagent for a single grep.
-4. **Verify before claiming** — every progress claim must trace to a tool result from this session.
-5. **Self-verification loop** — run checks at each milestone, then re-read the original request as if reviewing someone else's work.
-6. **Scope discipline, correctly bounded** — no unrequested features, but *"the task didn't ask for it" is never a reason to ship a result you know is wrong*. (This clause exists because both measured failures used exactly that excuse.)
-7. **Memory** — read and write durable learnings when a memory directory exists.
-8. **Reporting** — near-silence between tool calls; a final summary written for a reader who saw none of the work, outcome first.
-
-## Install
+**Install, in one command:**
 
 ```bash
-# user-level: applies to every project
-mkdir -p ~/.claude/skills/fable-mode
-curl -fsSL https://raw.githubusercontent.com/joe-qiao-ai/fable-mode/main/skills/fable-mode/SKILL.md \
+mkdir -p ~/.claude/skills/fable-mode && curl -fsSL \
+  https://raw.githubusercontent.com/joe-qiao-ai/fable-mode/main/skills/fable-mode/SKILL.md \
   -o ~/.claude/skills/fable-mode/SKILL.md
 ```
 
-Or clone and copy:
+---
 
-```bash
-git clone https://github.com/joe-qiao-ai/fable-mode.git
-cp -r fable-mode/skills/fable-mode ~/.claude/skills/
+## The problem this fixes
+
+Give Opus a task with a hidden data bug — one the unit tests don't catch, only visible if the agent actually runs the app and reads the output. Here's what happens:
+
+**Without fable-mode** (fails ~1 in 6 runs) — the agent wires up the code, sees the messy data, and decides it's "not in scope":
+
+```text
+Food: 12.50        ← same category,
+food: 8.00         ← counted three
+FOOD : 5.25        ← separate times
+Rent: 900.00
+ rent: 100.00
+transport: 20.00
+Transport: 15.00
 ```
 
-Then either invoke it per-session with `/fable-mode`, or make it the default for all sessions by adding one line to `~/.claude/CLAUDE.md`:
+**With fable-mode** (29/29 in our trials) — the agent treats a correctness problem it found as its problem, fixes the root cause, and notes what it did:
+
+```text
+food: 25.75
+rent: 1000.00
+transport: 35.00
+```
+
+Same model. Same task. The difference is one judgment call — and that call is exactly what this skill hard-codes:
+
+> *Scope discipline means not adding unrequested features — it does NOT mean shipping a wrong result. "The task didn't ask for it" is never a reason to deliver output you know is wrong.*
+
+## What's inside
+
+One file, eight rules — a working-style contract distilled from Anthropic's official Fable migration guidance, then hardened by testing:
+
+| # | Rule | What it changes |
+|---|------|-----------------|
+| 1 | Lock the goal | Restates the task with checkable "done" criteria before touching anything |
+| 2 | Autonomy | Decides minor choices and notes them; no "Want me to…?" for in-scope work |
+| 3 | Delegate deliberately | Parallel subagents for fan-out work; never a subagent for a single grep |
+| 4 | Verify before claiming | Every progress claim must trace to a real tool result |
+| 5 | Self-verification loop | Runs checks at each milestone; re-reads the original request at the end |
+| 6 | Scope, correctly bounded | No gold-plating — but a discovered defect is always in scope to fix |
+| 7 | Memory | Reads and writes durable learnings when a memory directory exists |
+| 8 | Reporting | Silent while working; final summary leads with the outcome |
+
+## How to use it
+
+**Per session** — type `/fable-mode` at the start of any substantial task.
+
+**As your default** — add one line to `~/.claude/CLAUDE.md`:
 
 ```markdown
-- At the start of every session, invoke the `fable-mode` skill and apply its working style to all substantial tasks (coding, research, multi-step agentic work). Trivial one-off questions don't need it.
+- At the start of every session, invoke the `fable-mode` skill and apply its working
+  style to all substantial tasks. Trivial one-off questions don't need it.
 ```
 
-## Pair it with the right settings
+**Two settings that matter more than any prompt** — the skill fixes judgment, not model settings:
 
-The skill changes *judgment*, not model settings. Two levers matter more than any prompt:
+- Keep effort at **`xhigh`** (Claude Code's default — don't lower it).
+- Put the **full spec in your first message**: goal, constraints, what "done" looks like.
 
-- **Keep effort at `xhigh`** (Claude Code's default) — the single biggest quality lever on Opus.
-- **Front-load the spec** — Opus performs far better with goal, constraints, and acceptance criteria stated in the first message than with requirements drip-fed across turns.
+## How good is it, honestly
 
-## What to expect (honestly)
+We ran **112 isolated agent trials** across four rounds — including throwing out our own first round for methodology contamination, and a 100-trial mechanically-scored scale-up. Everything is documented, including what *didn't* work:
 
-- The skill closes a **judgment gap**, not a capability gap. In our tests the failing runs diagnosed the bug perfectly — they just declined to act. That's what the skill fixes.
-- On Fable-tier models it is **redundant but harmless** (4/4 with or without).
-- Evidence is from small controlled runs (n = 4 per Opus arm, one task family). Directional, replicated once, not a benchmark. Full methodology, contamination post-mortem, and caveats: [docs/EVALUATION.md](docs/EVALUATION.md).
+| Finding | Evidence |
+|---|---|
+| ✅ Stops Opus shipping known-wrong results | 29/29 vs 24/29 on the trap task, p ≈ 0.026 |
+| ✅ Every observed no-skill failure was this exact mode | 5/5 failures: buggy module untouched, wrong output shipped |
+| ➖ Doesn't improve normal implementation tasks | Both arms 25/25 on the non-trap family |
+| ➖ Doesn't make Opus write tests unprompted | 0/25 in both arms |
+| ➖ Redundant on Fable-tier models | Fable: 4/4 with or without |
+
+**Fair summary:** this is a targeted fix for one real, reproducible failure mode — the ~12–17% of runs where unskilled Opus meets a problem nobody named and quietly ships a wrong result. It is not a general quality boost, and we don't claim one. Full methodology, statistics, null results, and the contamination post-mortem: [docs/EVALUATION.md](docs/EVALUATION.md).
 
 ## License
 
-[MIT](LICENSE)
-
-*Not affiliated with or endorsed by Anthropic. "Claude", "Fable", and "Opus" are Anthropic's model names, referenced here descriptively.*
+[MIT](LICENSE) · Not affiliated with or endorsed by Anthropic. "Claude", "Fable", and "Opus" are Anthropic's model names, referenced descriptively.
 
 ---
 
-## 中文说明
+# 中文说明
 
-`fable-mode` 是一个 Claude Code skill,把 Fable 级模型的工作习惯("自己拿主意、先验证再汇报、做完再收工")显式移植给 Opus。
+## 这是什么
 
-**实测效果**(判别任务共 58 次试验):在一个单元测试抓不到、只有跑真实数据才暴露的埋雷任务上,Opus 4.8 开启此 skill 后 29/29 全对;不开则 29 次里错 5 次(单侧 Fisher 精确检验 p ≈ 0.026)。每次失败都交付了一份自己本可以查出来的错误报表。在第二个非埋雷任务族上两组均 25/25——此 skill 是对「该拿主意时不拿」这一种失败模式的定向修复,不是全面提质。Fable 5 无论开关均 4/4(它默认就这么干活)。完整方法、统计和无效结果见 [docs/EVALUATION.md](docs/EVALUATION.md)。
+一个 Claude Code skill(单个 Markdown 文件),把 Anthropic 顶级 Fable 模型的工作习惯移植给 Opus:**该拿主意时拿主意、交付前自己验证、绝不交付明知有错的结果**。
 
-**安装**:把 `skills/fable-mode/` 复制到 `~/.claude/skills/`,会话里用 `/fable-mode` 调用;想全局默认生效,在 `~/.claude/CLAUDE.md` 加一行(见上文英文示例)。
+## 效果如何(实测,不吹)
 
-**搭配建议**:effort 保持 `xhigh`;需求在第一句话说全。这两个杠杆比任何提示词都重要。
+在一个单元测试抓不到、只有真跑一遍才暴露的埋雷任务上,58 次对照试验:
 
-完整实验方法与保留意见见 [docs/EVALUATION.md](docs/EVALUATION.md)。
+- **开启 skill:29/29 全对**
+- **不开:29 次错 5 次**(p ≈ 0.026)——每次失败都是同一个模式:发现了问题,以「任务没要求」为由不修,交付错误结果
+
+同时如实说明边界:在普通实现任务上两组无差异;它不会让 Opus 主动写测试;对 Fable 模型冗余。**它是对一种失败模式的定向修复,不是万能加速器。** 完整实验(含 100 次机械评分的规模化验证和方法论复盘)见 [docs/EVALUATION.md](docs/EVALUATION.md)。
+
+## 怎么用(30 秒)
+
+```bash
+# 1. 安装(用户级,所有项目生效)
+mkdir -p ~/.claude/skills/fable-mode && curl -fsSL \
+  https://raw.githubusercontent.com/joe-qiao-ai/fable-mode/main/skills/fable-mode/SKILL.md \
+  -o ~/.claude/skills/fable-mode/SKILL.md
+
+# 2. 会话里输入 /fable-mode 即可启用
+```
+
+想默认全局生效,在 `~/.claude/CLAUDE.md` 加一行(见上文英文示例)。
+
+**两个比提示词更重要的设置**:effort 保持 `xhigh`(Claude Code 默认值,别调低);需求在第一句话说全(目标、约束、怎么算完成)。
