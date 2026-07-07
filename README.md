@@ -2,7 +2,7 @@
 
 A [Claude Code](https://claude.com/claude-code) skill that carries the working habits of Anthropic's Fable-tier model over to Claude Opus — so Opus decides instead of deferring, verifies instead of assuming, and ships instead of asking.
 
-> **Measured result:** on a planted-bug task that unit tests can't catch, Opus 4.8 **with** this skill went **4/4 correct**; **without** it, **2/4** — both failures were the same mistake: the agent *saw* the bug, judged it "out of scope", and shipped a wrong result anyway. Fable 5 went 4/4 with or without the skill (the behaviors it encodes are Fable's defaults). See [docs/EVALUATION.md](docs/EVALUATION.md).
+> **Measured result (58 trials on the discriminating task):** on a planted bug that unit tests can't catch, Opus 4.8 **with** this skill shipped a correct result **29/29** times; **without** it, **24/29** (one-sided Fisher exact p ≈ 0.026). Every failure shipped a report the agent could have caught by checking its own output. On a second, non-trap task family both arms scored 25/25 — the effect is a targeted fix for one ownership failure mode, not a general quality boost. Fable 5 needed no skill (4/4 either way). Full methodology, statistics, and null results: [docs/EVALUATION.md](docs/EVALUATION.md).
 
 ## What it does
 
@@ -64,7 +64,7 @@ The skill changes *judgment*, not model settings. Two levers matter more than an
 
 `fable-mode` 是一个 Claude Code skill,把 Fable 级模型的工作习惯("自己拿主意、先验证再汇报、做完再收工")显式移植给 Opus。
 
-**实测效果**:在一个单元测试抓不到、只有跑真实数据才暴露的埋雷任务上,Opus 4.8 开启此 skill 后 4/4 全对;不开则 4 次里错 2 次——且两次失败一模一样:看到了问题,却以「任务没要求」为由交付了错误结果。skill 第 6 条的裁决规则就是针对这个失败模式加的。Fable 5 无论开关均 4/4(它默认就这么干活)。
+**实测效果**(判别任务共 58 次试验):在一个单元测试抓不到、只有跑真实数据才暴露的埋雷任务上,Opus 4.8 开启此 skill 后 29/29 全对;不开则 29 次里错 5 次(单侧 Fisher 精确检验 p ≈ 0.026)。每次失败都交付了一份自己本可以查出来的错误报表。在第二个非埋雷任务族上两组均 25/25——此 skill 是对「该拿主意时不拿」这一种失败模式的定向修复,不是全面提质。Fable 5 无论开关均 4/4(它默认就这么干活)。完整方法、统计和无效结果见 [docs/EVALUATION.md](docs/EVALUATION.md)。
 
 **安装**:把 `skills/fable-mode/` 复制到 `~/.claude/skills/`,会话里用 `/fable-mode` 调用;想全局默认生效,在 `~/.claude/CLAUDE.md` 加一行(见上文英文示例)。
 

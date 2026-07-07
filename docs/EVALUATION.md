@@ -1,6 +1,6 @@
 # Evaluation: does fable-mode actually change Opus's behavior?
 
-Twelve isolated agent runs across three rounds, with a methodology post-mortem in the middle. Short answer: **yes, on one specific and reproducible failure mode** — deferring on a problem the task didn't name.
+112 isolated agent runs across four rounds, including a 100-trial scale-up, with a methodology post-mortem in the middle. Short answer: **yes, on one specific and reproducible failure mode** — failing to own a correctness problem the task didn't name. On everything else measured, the skill made no difference — and we report that too.
 
 ## The task
 
@@ -29,7 +29,7 @@ The first round concluded "no material difference" — and was wrong, for three 
 2. **Over-specified prompts.** Naming the edge cases and demanding a "correct" report erased the ambiguity under test.
 3. **Summary instead of skill.** The skilled arm got a 4-line condensation, not the real SKILL.md.
 
-## Results
+## Results — rounds 2–3 (n = 4 per Opus arm)
 
 | Arm | Model | Correct deliverables |
 |---|---|---|
@@ -47,10 +47,39 @@ All four skilled Opus runs, and all four Fable runs, fixed the root cause unprom
 - **The gap is judgment, not capability.** The failing runs diagnosed the bug precisely; they declined to own it. The skill's autonomy rule ("decide and note it, don't defer") plus the scope-boundary clause added afterward ("*'the task didn't ask for it' is never a reason to ship a result you know is wrong*") target exactly this.
 - **On Fable the skill is redundant** — its behaviors are the model's defaults. That is the skill's premise: it ports Fable's habits to Opus.
 
+## Round 4 — the 100-trial scale-up
+
+To move past coin-flip sample sizes, 100 further trials ran as a parallel workflow: **2 task families × 2 arms × 25 trials**, every agent pinned to Opus 4.8, isolated directories, identical minimal reporting in both arms (a structured `done` + one-sentence note). The skilled arm received the full SKILL.md verbatim — including the scope-boundary clause added after rounds 2–3.
+
+- **Family 1, expense trap** — the same planted integration bug as rounds 2–3.
+- **Family 2, wordcount** — fix a failing suite and implement `top_n_words(text, n)`; the prompt deliberately names no edge cases (the v1 prompt's edge-case list was one of the original contaminations).
+
+Scoring was fully mechanical — output-category counts, test-suite runs, behavioral probes, test-method counts — with no agent self-reports consulted. (Transparency note: the first scoring pass had a quoting bug that marked all 50 wordcount runs failed; the 50/50 uniformity itself flagged it, the probe was re-run from a file, and one implementation was hand-verified before accepting any numbers.)
+
+### Results
+
+| Metric | With skill | No skill |
+|---|---|---|
+| Expense trap: correct report | **25 / 25** | **22 / 25** |
+| Wordcount: suite passes + core behavior correct | 25 / 25 | 25 / 25 |
+| Wordcount: guards degenerate `n < 0` | 0 / 25 | 0 / 25 |
+| Wordcount: added tests unprompted | 0 / 25 | 0 / 25 |
+
+All three expense failures left `parser.py` byte-identical to the template and shipped the 7-category wrong report. Unlike the rounds-2–3 failures (which explicitly noticed the messy data and declined), these three runs' notes don't mention the data problem at all — consistent with either missing it or silently skipping the output check.
+
+### Statistics
+
+- 100-trial round alone: 25/25 vs 22/25, one-sided Fisher exact **p ≈ 0.117** — not significant on its own.
+- Pooled across all identical-protocol trials of the trap task (rounds 2–4, n = 29 per arm): **29/29 vs 24/29, one-sided Fisher exact p ≈ 0.026**.
+
+### What did NOT replicate
+
+Round 1 had suggested the skilled arm writes more tests (4 added vs 0). Under the clean protocol, **neither arm added a single test in 50 runs**, and neither arm guarded the degenerate `n < 0` input. The v1 test-writing effect was an artifact of its contaminated prompt (which enumerated edge cases and asked about tests). The skill, as measured, does not make Opus write tests unprompted — its effect is confined to owning correctness-relevant problems it encounters.
+
 ## Caveats — read before quoting the numbers
 
-- **Small n.** 4 trials per Opus arm, 2 per Fable arm. The failure reproducing on a fresh copy is what lifts this above coin-flip noise, but 2/4 is a rough rate, not a precise one.
-- **One task family.** A single planted-bug scenario. Long-horizon drift, over-engineering, and interruption-rate were not measured here.
+- **The effect is narrow and the no-skill failure rate is modest.** ~12–17% of unskilled runs fail the trap task; the skill takes that to 0 across 29 trials (p ≈ 0.026 pooled). On a non-trap task family the skill changed nothing measurable. This is a targeted fix for one failure mode, not a general quality boost.
+- **Two task families, one discriminating.** Long-horizon drift, over-engineering, and interruption-rate were not measured here.
 - **Harness confound.** All agents ran inside Claude Code's agent harness, whose system prompt already carries some overlapping norms. The measured effect is the skill's increment *on top of* that — a bare-API gap would likely be larger.
 - **Same-author risk.** Task design, skill authorship, and scoring came from the same session; mitigations were mechanical scoring (category count) and independent re-runs.
 - **Model attribution.** Opus runs were pinned explicitly. Fable runs inherited the session model; run outputs carry no model marker for after-the-fact proof.
